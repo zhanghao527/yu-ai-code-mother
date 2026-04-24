@@ -1,11 +1,43 @@
-# AI 零代码应用生成平台
+# QuickForge — AI 低代码开发平台
 
+> 原项目：AI 零代码应用生成平台
+>
 > 作者：[程序员鱼皮](https://yuyuanweb.feishu.cn/wiki/Abldw5WkjidySxkKxU2cQdAtnah)
 >
 > 本项目为教学项目，提供完整视频教程 + 文字教程 + 简历写法 + 面试题解 + 答疑服务，帮你提升项目能力，给简历增加亮点！
 >
 > ⭐️ 加入项目系列学习：[加入编程导航](https://www.codefather.cn/vip)
 
+## 项目目录结构
+
+```
+QuickForge/
+├── frontend/                    # 前端 (Vue 3 + TypeScript + Vite + Ant Design Vue)
+│   ├── src/                     # 前端源码
+│   ├── public/                  # 静态资源
+│   ├── package.json             # 前端依赖配置
+│   └── vite.config.ts           # Vite 构建配置
+│
+├── backend/                     # 后端
+│   ├── monolith/                # 单体版 (Spring Boot 3 + Java 21)
+│   │   ├── src/                 # 后端源码
+│   │   ├── pom.xml              # Maven 配置
+│   │   └── mvnw                 # Maven Wrapper
+│   ├── microservice/            # 微服务版 (Spring Cloud Alibaba + Dubbo)
+│   │   ├── yu-ai-code-user/     # 用户服务
+│   │   ├── yu-ai-code-app/      # 应用管理服务
+│   │   ├── yu-ai-code-ai/       # AI 处理服务
+│   │   ├── yu-ai-code-screenshot/ # 截图/部署服务
+│   │   ├── yu-ai-code-client/   # API 网关
+│   │   ├── yu-ai-code-common/   # 公共模块
+│   │   ├── yu-ai-code-model/    # 数据模型
+│   │   └── pom.xml              # 微服务 Maven 配置
+│   ├── sql/                     # 数据库脚本
+│   ├── grafana/                 # Grafana 监控面板配置
+│   └── prometheus.yml           # Prometheus 监控配置
+│
+└── README.md                    # 项目说明
+```
 
 ## 一、项目介绍
 
