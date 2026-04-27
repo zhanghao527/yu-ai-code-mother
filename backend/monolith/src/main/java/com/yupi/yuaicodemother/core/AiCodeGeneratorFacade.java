@@ -10,6 +10,7 @@ import com.yupi.yuaicodemother.ai.model.message.ToolExecutedMessage;
 import com.yupi.yuaicodemother.ai.model.message.ToolRequestMessage;
 import com.yupi.yuaicodemother.constant.AppConstant;
 import com.yupi.yuaicodemother.core.builder.VueProjectBuilder;
+import com.yupi.yuaicodemother.core.builder.VueProjectBuilder.BuildResult;
 import com.yupi.yuaicodemother.core.parser.CodeParserExecutor;
 import com.yupi.yuaicodemother.core.saver.CodeFileSaverExecutor;
 import com.yupi.yuaicodemother.exception.BusinessException;
@@ -102,6 +103,8 @@ public class AiCodeGeneratorFacade {
         };
     }
 
+    private static final int MAX_BUILD_RETRY = 2;
+
     /**
      * 将 TokenStream 转换为 Flux<String>，并传递工具调用信息
      *
@@ -124,9 +127,17 @@ public class AiCodeGeneratorFacade {
                         sink.next(JSONUtil.toJsonStr(toolExecutedMessage));
                     })
                     .onCompleteResponse((ChatResponse response) -> {
-                        // 执行 Vue 项目构建（同步执行，确保预览时项目已就绪）
+                        // 执行 Vue 项目构建，支持重试
                         String projectPath = AppConstant.CODE_OUTPUT_ROOT_DIR + "/vue_project_" + appId;
-                        vueProjectBuilder.buildProject(projectPath);
+                        BuildResult buildResult = buildWithRetry(projectPath);
+                        if (!buildResult.isSuccess()) {
+                            // 构建最终失败，通过 SSE 通知前端
+                            AiResponseMessage errorMessage = new AiResponseMessage(
+                                    "\n\n❌ **项目构建失败**：" + truncateErrorLog(buildResult.getErrorLog())
+                                            + "\n\n请尝试重新描述需求或简化项目复杂度。"
+                            );
+                            sink.next(JSONUtil.toJsonStr(errorMessage));
+                        }
                         sink.complete();
                     })
                     .onError((Throwable error) -> {
@@ -135,6 +146,45 @@ public class AiCodeGeneratorFacade {
                     })
                     .start();
         });
+    }
+
+    /**
+     * 带重试的 Vue 项目构建
+     *
+     * @param projectPath 项目路径
+     * @return 构建结果
+     */
+    private BuildResult buildWithRetry(String projectPath) {
+        BuildResult result = vueProjectBuilder.buildProjectWithResult(projectPath);
+        if (result.isSuccess()) {
+            return result;
+        }
+        // 构建失败，进行重试
+        for (int i = 1; i <= MAX_BUILD_RETRY; i++) {
+            log.warn("Vue 项目构建失败（第 {} 次），准备重试...", i);
+            log.warn("构建错误日志：{}", result.getErrorLog());
+            result = vueProjectBuilder.buildProjectWithResult(projectPath);
+            if (result.isSuccess()) {
+                log.info("Vue 项目构建重试成功（第 {} 次）", i);
+                return result;
+            }
+        }
+        log.error("Vue 项目构建最终失败，已重试 {} 次", MAX_BUILD_RETRY);
+        return result;
+    }
+
+    /**
+     * 截断过长的错误日志，避免消息过大
+     */
+    private String truncateErrorLog(String errorLog) {
+        if (errorLog == null) {
+            return "未知错误";
+        }
+        // 只保留最后 500 个字符，通常包含最关键的错误信息
+        if (errorLog.length() > 500) {
+            return "..." + errorLog.substring(errorLog.length() - 500);
+        }
+        return errorLog;
     }
 
     /**

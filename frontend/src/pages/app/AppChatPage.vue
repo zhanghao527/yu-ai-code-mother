@@ -176,9 +176,16 @@
             <div class="placeholder-icon">🌐</div>
             <p>网站文件生成完成后将在这里展示</p>
           </div>
-          <div v-else-if="isGenerating" class="preview-loading">
+          <div v-else-if="isGenerating && !previewTimedOut" class="preview-loading">
             <a-spin size="large" />
             <p>正在生成网站...</p>
+          </div>
+          <div v-else-if="previewTimedOut" class="preview-timeout">
+            <div class="timeout-icon">⏱️</div>
+            <p>生成超时，请检查左侧对话中的错误信息</p>
+            <a-button type="primary" @click="previewTimedOut = false; isGenerating = false">
+              知道了
+            </a-button>
           </div>
           <iframe
               v-else
@@ -269,6 +276,8 @@ const historyLoaded = ref(false)
 // 预览相关
 const previewUrl = ref('')
 const previewReady = ref(false)
+const previewTimeout = ref<ReturnType<typeof setTimeout>>()
+const previewTimedOut = ref(false)
 
 // 部署相关
 const deploying = ref(false)
@@ -598,6 +607,18 @@ const updatePreview = () => {
     const newPreviewUrl = getStaticPreviewUrl(codeGenType, appId.value)
     previewUrl.value = newPreviewUrl
     previewReady.value = true
+    previewTimedOut.value = false
+
+    // 设置预览加载超时检测（120 秒）
+    if (previewTimeout.value) {
+      clearTimeout(previewTimeout.value)
+    }
+    previewTimeout.value = setTimeout(() => {
+      if (!previewReady.value || isGenerating.value) {
+        previewTimedOut.value = true
+        isGenerating.value = false
+      }
+    }, 120000)
   }
 }
 
@@ -691,6 +712,10 @@ const openDeployedSite = () => {
 // iframe加载完成
 const onIframeLoad = () => {
   previewReady.value = true
+  previewTimedOut.value = false
+  if (previewTimeout.value) {
+    clearTimeout(previewTimeout.value)
+  }
   const iframe = document.querySelector('.preview-iframe') as HTMLIFrameElement
   if (iframe) {
     visualEditor.init(iframe)
@@ -765,7 +790,9 @@ onMounted(() => {
 
 // 清理资源
 onUnmounted(() => {
-  // EventSource 会在组件卸载时自动清理
+  if (previewTimeout.value) {
+    clearTimeout(previewTimeout.value)
+  }
 })
 </script>
 
@@ -971,6 +998,20 @@ onUnmounted(() => {
 
 .preview-loading p {
   margin-top: 16px;
+}
+
+.preview-timeout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #666;
+  gap: 12px;
+}
+
+.timeout-icon {
+  font-size: 48px;
 }
 
 .preview-iframe {
