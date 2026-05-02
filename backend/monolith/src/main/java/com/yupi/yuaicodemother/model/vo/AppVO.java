@@ -37,6 +37,11 @@ public class AppVO implements Serializable {
     private String codeGenType;
 
     /**
+     * 编辑模式：ai_chat / lowcode
+     */
+    private String editorMode;
+
+    /**
      * 部署标识
      */
     private String deployKey;

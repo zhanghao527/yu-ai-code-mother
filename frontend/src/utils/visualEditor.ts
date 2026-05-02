@@ -25,7 +25,7 @@ export interface VisualEditorOptions {
 export class VisualEditor {
   private iframe: HTMLIFrameElement | null = null
   private isEditMode = false
-  private options: VisualEditorOptions
+  public options: VisualEditorOptions
 
   constructor(options: VisualEditorOptions = {}) {
     this.options = options
@@ -354,6 +354,80 @@ export class VisualEditor {
            document.body.addEventListener('mouseover', mouseoverHandler, true);
            document.body.addEventListener('mouseout', mouseoutHandler, true);
            document.body.addEventListener('click', clickHandler, true);
+
+           // 拖拽放置支持
+           let dropIndicator = null;
+           document.body.addEventListener('dragover', (event) => {
+             if (!isEditMode) return;
+             event.preventDefault();
+             event.dataTransfer.dropEffect = 'copy';
+
+             // 显示放置指示器
+             const target = event.target;
+             if (target === document.body || target === document.documentElement) return;
+             if (target.tagName === 'SCRIPT' || target.tagName === 'STYLE') return;
+
+             // 移除旧指示器
+             if (dropIndicator) dropIndicator.remove();
+
+             // 创建放置指示线
+             dropIndicator = document.createElement('div');
+             dropIndicator.id = 'drop-indicator';
+             dropIndicator.style.cssText = 'height:3px;background:#1890ff;border-radius:2px;margin:4px 0;pointer-events:none;transition:all 0.15s;box-shadow:0 0 8px rgba(24,144,255,0.4);';
+
+             // 判断放在元素上方还是下方
+             const rect = target.getBoundingClientRect();
+             const midY = rect.top + rect.height / 2;
+             if (event.clientY < midY) {
+               target.parentElement && target.parentElement.insertBefore(dropIndicator, target);
+             } else {
+               target.parentElement && target.parentElement.insertBefore(dropIndicator, target.nextSibling);
+             }
+           }, true);
+
+           document.body.addEventListener('dragleave', (event) => {
+             // 延迟移除，避免闪烁
+             setTimeout(() => {
+               if (dropIndicator && !document.body.matches(':hover')) {
+                 dropIndicator.remove();
+                 dropIndicator = null;
+               }
+             }, 100);
+           }, true);
+
+           document.body.addEventListener('drop', (event) => {
+             if (!isEditMode) return;
+             event.preventDefault();
+
+             const html = event.dataTransfer.getData('text/html');
+             if (!html) return;
+
+             // 创建元素
+             const temp = document.createElement('div');
+             temp.innerHTML = html;
+             const newEl = temp.firstElementChild || temp;
+
+             // 插入到指示器位置
+             if (dropIndicator && dropIndicator.parentElement) {
+               dropIndicator.parentElement.insertBefore(newEl.cloneNode ? newEl.cloneNode(true) : newEl, dropIndicator);
+               dropIndicator.remove();
+               dropIndicator = null;
+             } else {
+               // 回退：插入到 body 末尾
+               const footer = document.querySelector('footer');
+               if (footer) {
+                 footer.parentElement.insertBefore(newEl.cloneNode ? newEl.cloneNode(true) : newEl, footer);
+               } else {
+                 document.body.appendChild(newEl.cloneNode ? newEl.cloneNode(true) : newEl);
+               }
+             }
+
+             // 通知父窗口
+             try {
+               window.parent.postMessage({ type: 'COMPONENT_DROPPED' }, '*');
+             } catch {}
+           }, true);
+
            eventListenersAdded = true;
          }
 
@@ -386,6 +460,62 @@ export class VisualEditor {
                const tip = document.getElementById('edit-tip');
                if (tip) tip.remove();
                break;
+             // 低代码编辑命令
+             case 'LOWCODE_SET_TEXT': {
+               const el = document.querySelector(event.data.selector);
+               if (el) el.textContent = event.data.value;
+               break;
+             }
+             case 'LOWCODE_SET_ATTR': {
+               const el = document.querySelector(event.data.selector);
+               if (el) el.setAttribute(event.data.attr, event.data.value);
+               break;
+             }
+             case 'LOWCODE_SET_STYLE': {
+               const el = document.querySelector(event.data.selector);
+               if (el) el.style[event.data.prop] = event.data.value;
+               break;
+             }
+             case 'LOWCODE_DELETE': {
+               const el = document.querySelector(event.data.selector);
+               if (el) el.remove();
+               clearSelectedEffect();
+               break;
+             }
+             case 'LOWCODE_INSERT_HTML': {
+               const html = event.data.html;
+               const position = event.data.position;
+               const temp = document.createElement('div');
+               temp.innerHTML = html;
+               const newEl = temp.firstElementChild;
+               if (newEl) {
+                 if (position) {
+                   const target = document.querySelector(position);
+                   if (target && target.parentElement) {
+                     target.parentElement.insertBefore(newEl, target.nextSibling);
+                   } else {
+                     document.body.appendChild(newEl);
+                   }
+                 } else {
+                   // 插入到 body 末尾（在 footer 之前如果有的话）
+                   const footer = document.querySelector('footer');
+                   if (footer) {
+                     footer.parentElement.insertBefore(newEl, footer);
+                   } else {
+                     document.body.appendChild(newEl);
+                   }
+                 }
+               }
+               break;
+             }
+             case 'LOWCODE_DUPLICATE': {
+               const el = document.querySelector(event.data.selector);
+               if (el && el.parentElement) {
+                 const clone = el.cloneNode(true);
+                 el.parentElement.insertBefore(clone, el.nextSibling);
+               }
+               break;
+             }
            }
          });
 

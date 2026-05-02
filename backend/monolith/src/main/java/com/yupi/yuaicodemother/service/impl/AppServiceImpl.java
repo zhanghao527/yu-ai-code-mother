@@ -119,22 +119,37 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
     @Override
     public Long createApp(AppAddRequest appAddRequest, User loginUser) {
         // 参数校验
+        String editorMode = appAddRequest.getEditorMode();
+        boolean isLowcode = "lowcode".equals(editorMode);
+
+        // 低代码模式不需要 initPrompt
         String initPrompt = appAddRequest.getInitPrompt();
-        ThrowUtils.throwIf(StrUtil.isBlank(initPrompt), ErrorCode.PARAMS_ERROR, "初始化 prompt 不能为空");
+        if (!isLowcode) {
+            ThrowUtils.throwIf(StrUtil.isBlank(initPrompt), ErrorCode.PARAMS_ERROR, "初始化 prompt 不能为空");
+        }
+
         // 构造入库对象
         App app = new App();
         BeanUtil.copyProperties(appAddRequest, app);
         app.setUserId(loginUser.getId());
-        // 应用名称暂时为 initPrompt 前 12 位
-        app.setAppName(initPrompt.substring(0, Math.min(initPrompt.length(), 12)));
-        // 使用 AI 智能选择代码生成类型（多例模式）
-        AiCodeGenTypeRoutingService aiCodeGenTypeRoutingService = aiCodeGenTypeRoutingServiceFactory.createAiCodeGenTypeRoutingService();
-        CodeGenTypeEnum selectedCodeGenType = aiCodeGenTypeRoutingService.routeCodeGenType(initPrompt);
-        app.setCodeGenType(selectedCodeGenType.getValue());
+        app.setEditorMode(isLowcode ? "lowcode" : "ai_chat");
+
+        if (isLowcode) {
+            // 低代码模式：直接设置类型，不走 AI 路由
+            app.setCodeGenType(CodeGenTypeEnum.LOWCODE.getValue());
+            app.setAppName(StrUtil.isNotBlank(initPrompt) ? initPrompt.substring(0, Math.min(initPrompt.length(), 12)) : "低代码应用");
+        } else {
+            // AI 对话模式：使用 AI 智能选择代码生成类型
+            app.setAppName(initPrompt.substring(0, Math.min(initPrompt.length(), 12)));
+            AiCodeGenTypeRoutingService aiCodeGenTypeRoutingService = aiCodeGenTypeRoutingServiceFactory.createAiCodeGenTypeRoutingService();
+            CodeGenTypeEnum selectedCodeGenType = aiCodeGenTypeRoutingService.routeCodeGenType(initPrompt);
+            app.setCodeGenType(selectedCodeGenType.getValue());
+        }
+
         // 插入数据库
         boolean result = this.save(app);
         ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
-        log.info("应用创建成功，ID: {}, 类型: {}", app.getId(), selectedCodeGenType.getValue());
+        log.info("应用创建成功，ID: {}, 模式: {}, 类型: {}", app.getId(), app.getEditorMode(), app.getCodeGenType());
         return app.getId();
     }
 

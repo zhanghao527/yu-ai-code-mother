@@ -39,14 +39,14 @@ const setPrompt = (prompt: string) => {
 
 // 创建应用
 const createApp = async () => {
-  if (!userPrompt.value.trim()) {
-    message.warning('请输入应用描述')
-    return
-  }
-
   if (!loginUserStore.loginUser.id) {
     message.warning('请先登录')
     await router.push('/user/login')
+    return
+  }
+
+  if (!userPrompt.value.trim()) {
+    message.warning('请输入应用描述')
     return
   }
 
@@ -58,7 +58,6 @@ const createApp = async () => {
 
     if (res.data.code === 0 && res.data.data) {
       message.success('应用创建成功')
-      // 跳转到对话页面，确保ID是字符串类型
       const appId = String(res.data.data)
       await router.push(`/app/chat/${appId}`)
     } else {
@@ -115,9 +114,9 @@ const loadFeaturedApps = async () => {
 }
 
 // 查看对话
-const viewChat = (appId: string | number | undefined) => {
-  if (appId) {
-    router.push(`/app/chat/${appId}?view=1`)
+const viewChat = (app: API.AppVO) => {
+  if (app.id) {
+    router.push(`/app/chat/${app.id}?view=1`)
   }
 }
 

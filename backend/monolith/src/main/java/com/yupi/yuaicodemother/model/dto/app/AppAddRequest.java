@@ -15,5 +15,10 @@ public class AppAddRequest implements Serializable {
      */
     private String initPrompt;
 
+    /**
+     * 编辑模式：ai_chat / lowcode
+     */
+    private String editorMode;
+
     private static final long serialVersionUID = 1L;
 } 
