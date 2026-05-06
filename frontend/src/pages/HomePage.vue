@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { useLoginUserStore } from '@/stores/loginUser'
 import { addApp, listMyAppVoByPage, listGoodAppVoByPage } from '@/api/appController'
 import { getDeployUrl } from '@/config/env'
 import AppCard from '@/components/AppCard.vue'
+import { designStyles, designStyleCategories, getDesignStylePrompt, type DesignStyle } from '@/utils/designStyles'
 
 const router = useRouter()
 const loginUserStore = useLoginUserStore()
@@ -13,6 +14,23 @@ const loginUserStore = useLoginUserStore()
 // 用户提示词
 const userPrompt = ref('')
 const creating = ref(false)
+
+// 设计风格
+const selectedDesignStyle = ref<string>('')
+
+// 设计风格下拉选项（按分类分组）
+const designStyleOptions = computed(() => {
+  return designStyleCategories.map((cat) => ({
+    label: cat.label,
+    options: designStyles
+      .filter((s) => s.category === cat.key)
+      .map((s) => ({
+        value: s.key,
+        label: s.label,
+        description: s.description,
+      })),
+  }))
+})
 
 // 我的应用数据
 const myApps = ref<API.AppVO[]>([])
@@ -52,8 +70,18 @@ const createApp = async () => {
 
   creating.value = true
   try {
+    // 如果选择了设计风格，将风格描述附加到 prompt 中
+    let finalPrompt = userPrompt.value.trim()
+    if (selectedDesignStyle.value) {
+      const stylePrompt = getDesignStylePrompt(selectedDesignStyle.value)
+      const styleName = designStyles.find(s => s.key === selectedDesignStyle.value)?.name || ''
+      if (stylePrompt) {
+        finalPrompt += `\n\n【设计风格要求】请参考 ${styleName} 的设计风格：${stylePrompt}。整体视觉风格、配色方案、排版布局都要贴近这个风格。`
+      }
+    }
+
     const res = await addApp({
-      initPrompt: userPrompt.value.trim(),
+      initPrompt: finalPrompt,
     })
 
     if (res.data.code === 0 && res.data.data) {
@@ -173,12 +201,37 @@ onMounted(() => {
           :maxlength="1000"
           class="prompt-input"
         />
-        <div class="input-actions">
-          <a-button type="primary" size="large" @click="createApp" :loading="creating">
-            <template #icon>
-              <span>↑</span>
-            </template>
-          </a-button>
+        <div class="input-bottom-bar">
+          <div class="style-selector">
+            <a-select
+              v-model:value="selectedDesignStyle"
+              placeholder="🎨 选择设计风格（可选）"
+              allow-clear
+              :options="designStyleOptions"
+              :popup-match-select-width="false"
+              style="width: 260px"
+              option-label-prop="label"
+            >
+              <template #option="{ label, description }">
+                <div class="style-option">
+                  <span class="style-option-label">{{ label }}</span>
+                  <a-tooltip :title="description" placement="right">
+                    <span class="style-option-help">?</span>
+                  </a-tooltip>
+                </div>
+              </template>
+              <template #optionGroup="{ label }">
+                <span class="style-group-label">{{ label }}</span>
+              </template>
+            </a-select>
+          </div>
+          <div class="input-actions">
+            <a-button type="primary" size="large" @click="createApp" :loading="creating">
+              <template #icon>
+                <span>↑</span>
+              </template>
+            </a-button>
+          </div>
         </div>
       </div>
 
@@ -449,10 +502,10 @@ onMounted(() => {
 }
 
 .prompt-input {
-  border-radius: 16px;
+  border-radius: 16px 16px 0 0;
   border: none;
   font-size: 16px;
-  padding: 20px 60px 20px 20px;
+  padding: 20px 20px 16px 20px;
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(20px);
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
@@ -461,13 +514,36 @@ onMounted(() => {
 .prompt-input:focus {
   background: rgba(255, 255, 255, 1);
   box-shadow: 0 15px 50px rgba(0, 0, 0, 0.3);
-  transform: translateY(-2px);
+}
+
+.input-bottom-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px);
+  border-radius: 0 0 16px 16px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+}
+
+.style-selector {
+  display: flex;
+  align-items: center;
+}
+
+.style-selector :deep(.ant-select-selector) {
+  border-radius: 8px !important;
+  border: 1px solid rgba(59, 130, 246, 0.2) !important;
+  background: rgba(248, 250, 252, 0.8) !important;
+  font-size: 13px;
+}
+
+.style-selector :deep(.ant-select-selector:hover) {
+  border-color: rgba(59, 130, 246, 0.4) !important;
 }
 
 .input-actions {
-  position: absolute;
-  bottom: 12px;
-  right: 12px;
   display: flex;
   gap: 8px;
   align-items: center;
@@ -571,5 +647,64 @@ onMounted(() => {
   .quick-actions {
     justify-content: center;
   }
+
+  .input-bottom-bar {
+    flex-direction: column;
+    gap: 10px;
+    align-items: stretch;
+  }
+
+  .style-selector {
+    width: 100%;
+  }
+
+  .style-selector :deep(.ant-select) {
+    width: 100% !important;
+  }
+
+  .input-actions {
+    justify-content: flex-end;
+  }
+}
+
+/* 设计风格下拉选项样式 */
+:global(.style-option) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+:global(.style-option-label) {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:global(.style-option-help) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+  font-size: 11px;
+  font-weight: 600;
+  margin-left: 8px;
+  flex-shrink: 0;
+  cursor: help;
+}
+
+:global(.style-option-help:hover) {
+  background: rgba(59, 130, 246, 0.2);
+}
+
+:global(.style-group-label) {
+  font-weight: 600;
+  color: #64748b;
+  font-size: 12px;
 }
 </style>
